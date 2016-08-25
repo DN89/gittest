@@ -1,0 +1,233 @@
+commit 329ea185b3f67fc880e4184d0bcb9f3b3fee8e53
+Author: SJY <oops_mylover@naver.com>
+Date:   Thu Aug 25 09:37:31 2016 +0900
+
+    readme created
+
+diff --git a/README b/README
+new file mode 100644
+index 0000000..8d0e412
+--- /dev/null
++++ b/README
+@@ -0,0 +1 @@
++hello git
+
+commit 7a4e10710287b011ca03caf9dab1659d999f9eff
+Author: SJY <oops_mylover@naver.com>
+Date:   Thu Aug 25 09:35:12 2016 +0900
+
+    initial project
+
+diff --git a/Makefile b/Makefile
+new file mode 100755
+index 0000000..2975ae4
+--- /dev/null
++++ b/Makefile
+@@ -0,0 +1,12 @@
++obj-m := basicmem.o
++#obj-m := mempool.o
++
++#KDIR	:= /lib/modules/$(shell uname -r)/build
++KDIR	:= /work/kernel-mds2450-3.0.22
++
++all:
++	make -C $(KDIR) SUBDIRS=$(PWD) modules
++
++clean:
++	make -C $(KDIR) SUBDIRS=$(PWD) clean
++
+diff --git a/basicmem.c b/basicmem.c
+new file mode 100755
+index 0000000..ee50a94
+--- /dev/null
++++ b/basicmem.c
+@@ -0,0 +1,95 @@
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/kernel.h>
++
++#include <linux/slab.h>
++#include <linux/vmalloc.h>
++
++void kmalloc_test( void )
++{
++    char *buff;
++   	unsigned long allocsize; 
++    printk( "kmalloc test\n" );
++
++	/* TODO: 1024 사이즈 만큼 kmalloc로 buff에 할당하기 */
++    allocsize = 1024;
++	buff = kmalloc(allocsize, GFP_KERNEL);
++
++	if( buff != NULL )
++    {
++        sprintf( buff, "test memory : %lu\n",allocsize );
++        printk( buff );
++    
++        kfree( buff );
++    }    
++    
++    /* TODO: kmalloc를 이용해 kmalloc의 최대 만큼 할당해 보기 */
++	allocsize = PAGE_SIZE * 1000;
++	buff = kmalloc(allocsize, GFP_KERNEL);
++    
++	if( buff != NULL )
++    {
++        printk( "Big Memory Ok : %lu\n", allocsize);
++        kfree( buff );
++    }
++    
++}
++
++void vmalloc_test( void )
++{
++    char *buff;
++	unsigned long allocsize;
++    printk( "vmalloc test\n" );
++    
++    /* TODO: vmalloc를 사용해 kmalloc의 최대 + 100 만큼 할당하기 */
++    allocsize = KMALLOC_MAX_SIZE + 100;
++	buff = vmalloc(allocsize);
++	if( buff != NULL )
++    {
++        sprintf( buff, "vmalloc test ok\n" );
++        printk("vmalloc size : %lu\n", allocsize);
++    
++        vfree( buff );
++    }    
++
++}
++
++void get_free_pages_test( void )
++{
++    char *buff;
++    int   order;
++
++    printk( "get_free_pages test\n" );
++    order = get_order(8192*10);
++    buff  = (char *)(__get_free_pages( GFP_KERNEL, order ));
++    if( buff != NULL) 
++    {
++        sprintf( buff, "__get_free_pages test ok [%d]\n", order );
++        printk( buff );
++        
++        free_pages((unsigned long)buff, order);
++    }
++}
++
++int memtest_init(void)      
++{ 
++    char *data;
++    
++    printk("Module Memory Test\n" );
++    
++    kmalloc_test();
++    vmalloc_test();
++    get_free_pages_test();
++    
++    return 0; 
++}
++
++void memtest_exit(void)  
++{ 
++    printk("Module Memory Test End\n"); 
++}
++
++module_init(memtest_init);
++module_exit(memtest_exit);
++
++MODULE_LICENSE("Dual BSD/GPL");
+diff --git a/mempool.c b/mempool.c
+new file mode 100755
+index 0000000..961e2ba
+--- /dev/null
++++ b/mempool.c
+@@ -0,0 +1,88 @@
++/***************************************
++ * Filename: mempool.c
++ * Title: mempool Test Module
++ * Desc: mempool create
++ ****************************************/
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/kernel.h>
++
++#include <linux/slab.h>
++#include <linux/mempool.h>
++
++#define MIN_ELEMENT     4
++#define TEST_ELEMENT    4
++
++typedef struct 
++{
++    int number;
++    char string[128];
++} TMemElement;
++
++
++int elementcount = 0;
++
++void *mempool_alloc_test(int gfp_mask, void *pool_data)
++{
++    TMemElement  *data;
++    printk( "----> mempool_alloc_test\n" );        
++    
++    data = kmalloc( sizeof( TMemElement ), gfp_mask );
++    if( data != NULL ) data->number = elementcount++;
++    return data;
++}
++
++void mempool_free_test(void *element, void *pool_data)
++{
++    printk( "----> call mempool_free_test\n" );        
++    if( element != NULL ) kfree( element );
++}
++
++int mempool_init(void)      
++{ 
++    mempool_t   *mp;    
++    TMemElement *element[TEST_ELEMENT];
++    int          lp;
++    
++    printk("Module MEMPOOL Test\n" );
++    
++    memset( element, 0, sizeof( element ) );
++    
++    printk( "call mempool_create\n" );
++    //mp = mempool_create( MIN_ELEMENT, mempool_alloc_test, mempool_free_test, NULL );
++    mp = mempool_create( 3, mempool_alloc_test, mempool_free_test, NULL );
++    
++    printk( "mempool allocate\n" );
++    for( lp=0; lp < TEST_ELEMENT; lp++ )
++    {
++        element[lp] = mempool_alloc(mp, GFP_KERNEL );
++        if( element[lp] == NULL ) printk( "allocte fail\n" );
++        else
++        {
++            sprintf( element[lp]->string, "alloc data %d\n", element[lp]->number );
++            printk( element[lp]->string );
++        }
++    }
++    
++    printk( "mempool free\n" );
++    for( lp=0; lp < TEST_ELEMENT; lp++ )
++    {
++        if( element[lp] != NULL ) mempool_free( element[lp], mp );
++    }
++    
++    printk( "call mempool_destroy\n" );
++    mempool_destroy( mp );
++    
++    return 0; 
++}
++
++void mempool_exit(void)  
++{ 
++    printk("Module MEMPOOL Test End\n"); 
++}
++
++module_init(mempool_init);
++module_exit(mempool_exit);
++
++MODULE_LICENSE("Dual BSD/GPL");
++
